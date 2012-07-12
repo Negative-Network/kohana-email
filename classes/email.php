@@ -139,7 +139,45 @@ class Email {
 			$message->setFrom($from[0], $from[1]);
 		}
 
-		return Email::$mail->send($message);
+		// Try sending the email 4 times
+		return self::_send_email($message, 4);
+	}
+
+	protected static function _send_email($message, $max_tries = 1, $attempts = 0)
+	{
+		static $last_error;
+
+		if ($attempts >= $max_tries)
+		{
+			Kohana::$log->add(Kohana::ERROR, 'Sending email failed after '.$attempts.' attempts. Last error Message: '.$last_error);
+			return 0;
+		}
+
+		try
+		{
+			$attempts++;
+			// Try reconnecting so we get a different server each time
+			if ($attempts > 1)
+			{
+				Email::connect();
+			}
+			return Email::$mail->send($message);
+		}
+		catch (Swift_IoException $e)
+		{
+			$last_error = $e->getMessage();
+			return self::_send_email($message, $max_tries, $attempts);
+		}
+		catch (Swift_TransportException $e)
+		{
+			$last_error = $e->getMessage();
+			return self::_send_email($message, $max_tries, $attempts);
+		}
+		catch (Exception $e)
+		{
+			Kohana::$log->add(Kohana::ERROR, 'Sending email failed after '.$attempts.' with unexpected exception: '.$e->getMessage());
+			return 0;
+		}
 	}
 
 } // End email
